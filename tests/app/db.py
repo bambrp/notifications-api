@@ -49,8 +49,8 @@ from app.models import (
     FactNotificationStatus,
     Complaint,
     InvitedUser,
-    TemplateFolder,
 )
+from app.models.template_folder import TemplateFolder
 
 
 def create_user(mobile_number="+447700900986", email="notify@digital.cabinet-office.gov.uk", state='active', id_=None):

@@ -706,24 +706,7 @@ class TemplateProcessTypes(db.Model):
     name = db.Column(db.String(255), primary_key=True)
 
 
-class TemplateFolder(db.Model):
-    __tablename__ = 'template_folder'
-
-    id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    service_id = db.Column(UUID(as_uuid=True), db.ForeignKey('services.id'), nullable=False)
-    name = db.Column(db.String, nullable=False)
-    parent_id = db.Column(UUID(as_uuid=True), db.ForeignKey('template_folder.id'), nullable=True)
-
-    service = db.relationship('Service', backref='all_template_folders')
-    parent = db.relationship('TemplateFolder', remote_side=[id], backref='subfolders')
-
-    def serialize(self):
-        return {
-            'id': self.id,
-            'name': self.name,
-            'parent_id': self.parent_id,
-            'service_id': self.service_id
-        }
+PRECOMPILED_TEMPLATE_NAME = 'Pre-compiled PDF'
 
 
 template_folder_map = db.Table(
@@ -733,9 +716,6 @@ template_folder_map = db.Table(
     db.Column('template_id', UUID(as_uuid=True), db.ForeignKey('templates.id'), primary_key=True, nullable=False),
     db.Column('template_folder_id', UUID(as_uuid=True), db.ForeignKey('template_folder.id'), nullable=False),
 )
-
-
-PRECOMPILED_TEMPLATE_NAME = 'Pre-compiled PDF'
 
 
 class TemplateBase(db.Model):

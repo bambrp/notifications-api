@@ -2,7 +2,7 @@ import uuid
 
 import pytest
 
-from app.models import TemplateFolder
+from app.models.template_folder import TemplateFolder
 
 from tests.app.db import create_service, create_template_folder
 
