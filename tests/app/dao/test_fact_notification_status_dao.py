@@ -11,6 +11,7 @@ from app.dao.fact_notification_status_dao import (
     fetch_notification_status_for_service_for_today_and_7_previous_days,
     fetch_notification_status_totals_for_all_services,
     fetch_notification_statuses_for_job,
+    fetch_notification_status_totals_for_all_services_group_by_services
 )
 from app.models import FactNotificationStatus, KEY_TYPE_TEST, KEY_TYPE_TEAM, EMAIL_TYPE, SMS_TYPE, LETTER_TYPE
 from freezegun import freeze_time
@@ -274,7 +275,6 @@ def test_fetch_notification_status_totals_for_all_services(
 
 def set_up_data():
     service_2 = create_service(service_name='service_2')
-    create_template(service=service_2, template_type=LETTER_TYPE)
     service_1 = create_service(service_name='service_1')
     sms_template = create_template(service=service_1, template_type=SMS_TYPE)
     email_template = create_template(service=service_1, template_type=EMAIL_TYPE)
@@ -304,3 +304,24 @@ def test_fetch_notification_statuses_for_job(sample_template):
         'created': 5,
         'delivered': 2
     }
+
+
+@pytest.mark.parametrize(
+    "start_date, end_date",
+    [
+        (29, 30),
+        (29, 31)
+    ]
+
+)
+@freeze_time('2018-10-31 14:00')
+def test_fetch_notification_status_totals_for_all_services_group_by_services(
+      notify_db_session, start_date, end_date
+):
+    set_up_data()
+    results = fetch_notification_status_totals_for_all_services_group_by_services(
+        start_date=date(2018, 10, start_date), end_date=date(2018, 10, end_date)
+    )
+    print(results)
+
+    assert 1==1

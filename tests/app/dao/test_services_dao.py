@@ -844,6 +844,7 @@ def test_fetch_stats_by_date_range_for_all_services_returns_test_notifications(n
 def test_fetch_stats_by_date_range_during_bst_hour_for_all_services_returns_test_notifications(
         notify_db_session, start_delta, end_delta, expected
 ):
+    create_service(service_name='service2')
     template = create_template(service=create_service())
     result_one = create_notification(template=template, created_at=datetime.now(), key_type='test')
     create_notification(template=template, created_at=datetime.now() - timedelta(days=2), key_type='test')

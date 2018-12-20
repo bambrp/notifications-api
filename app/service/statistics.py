@@ -13,7 +13,8 @@ def format_statistics(statistics):
     # so we can return emails/sms * created, sent, and failed
     counts = create_zeroed_stats_dicts()
     for row in statistics:
-        _update_statuses_from_row(counts[row.notification_type], row)
+        if row.notification_type:
+            _update_statuses_from_row(counts[row.notification_type], row)
 
     return counts
 

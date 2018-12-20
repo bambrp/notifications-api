@@ -5,10 +5,10 @@ from notifications_utils.timezones import convert_bst_to_utc
 from sqlalchemy import func
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.sql.expression import literal
-from sqlalchemy.types import DateTime, Integer
+from sqlalchemy.types import DateTime, Integer, Text
 
 from app import db
-from app.models import Notification, NotificationHistory, FactNotificationStatus, KEY_TYPE_TEST
+from app.models import Notification, NotificationHistory, FactNotificationStatus, KEY_TYPE_TEST, Service
 from app.utils import get_london_midnight_in_utc, midnight_n_days_ago
 
 
@@ -118,7 +118,7 @@ def fetch_notification_status_for_service_for_today_and_7_previous_days(service_
     )
 
     stats_for_today = db.session.query(
-        Notification.notification_type.cast(db.Text),
+        Notification.notification_type.cast(Text),
         Notification.status,
         func.count().label('count')
     ).filter(
@@ -159,14 +159,14 @@ def fetch_notification_status_totals_for_all_services(start_date, end_date):
     today = get_london_midnight_in_utc(datetime.utcnow())
     if start_date <= today.date() <= end_date:
         stats_for_today = db.session.query(
-            Notification.notification_type.cast(db.Text).label('notification_type'),
+            Notification.notification_type.cast(Text).label('notification_type'),
             Notification.status,
             Notification.key_type,
             func.count().label('count')
         ).filter(
             Notification.created_at >= today
         ).group_by(
-            Notification.notification_type.cast(db.Text),
+            Notification.notification_type.cast(Text),
             Notification.status,
             Notification.key_type,
         )
@@ -175,7 +175,7 @@ def fetch_notification_status_totals_for_all_services(start_date, end_date):
             all_stats_table.c.notification_type,
             all_stats_table.c.status,
             all_stats_table.c.key_type,
-            func.cast(func.sum(all_stats_table.c.count), Integer).label('count'),
+            func.sum(all_stats_table.c.count).cast(Integer).label('count'),
         ).group_by(
             all_stats_table.c.notification_type,
             all_stats_table.c.status,
@@ -197,3 +197,94 @@ def fetch_notification_statuses_for_job(job_id):
     ).group_by(
         FactNotificationStatus.notification_status
     ).all()
+
+
+def fetch_notification_status_totals_for_all_services_group_by_services(
+        start_date, end_date, include_from_test_key=True
+):
+    stats = db.session.query(
+        FactNotificationStatus.service_id.label('service_id'),
+        Service.name.label('name'),
+        Service.restricted.label('restricted'),
+        Service.research_mode.label('research_mode'),
+        Service.active.label('active'),
+        Service.created_at.label('created_at'),
+        FactNotificationStatus.notification_type.label('notification_type'),
+        FactNotificationStatus.notification_status.label('status'),
+        func.sum(FactNotificationStatus.notification_count).label('count')
+    ).filter(
+        FactNotificationStatus.service_id == Service.id,
+        FactNotificationStatus.bst_date >= start_date,
+        FactNotificationStatus.bst_date <= end_date
+    ).group_by(
+        FactNotificationStatus.service_id,
+        Service.name,
+        Service.restricted,
+        Service.research_mode,
+        Service.active,
+        Service.created_at,
+        FactNotificationStatus.notification_type,
+        FactNotificationStatus.notification_status,
+    ).order_by(
+        FactNotificationStatus.service_id
+    )
+    if not include_from_test_key:
+        stats = stats.filter(FactNotificationStatus.key_type != KEY_TYPE_TEST)
+    today = get_london_midnight_in_utc(datetime.utcnow())
+    if start_date <= today.date() <= end_date:
+        subquery = db.session.query(
+            Notification.notification_type,
+            Notification.status,
+            Notification.service_id,
+            func.count(Notification.id).label('count')
+        ).filter(
+            Notification.created_at >= today
+        ).group_by(
+            Notification.notification_type,
+            Notification.status,
+            Notification.service_id
+        )
+        if not include_from_test_key:
+            subquery = subquery.filter(Notification.key_type != KEY_TYPE_TEST)
+        subquery = subquery.subquery()
+        stats_for_today = db.session.query(
+            Service.id.label('service_id'),
+            Service.name.label('name'),
+            Service.restricted.label('restricted'),
+            Service.research_mode.label('research_mode'),
+            Service.active.label('active'),
+            Service.created_at.label('created_at'),
+            subquery.c.notification_type.cast(Text).label('notification_type'),
+            subquery.c.status.label('status'),
+            subquery.c.count.label('count')
+        ).outerjoin(
+            subquery,
+            subquery.c.service_id == Service.id
+        ).order_by(Service.id)
+
+        all_stats_table = stats.union_all(stats_for_today).subquery()
+        query = db.session.query(
+            all_stats_table.c.service_id,
+            all_stats_table.c.name,
+            all_stats_table.c.restricted,
+            all_stats_table.c.research_mode,
+            all_stats_table.c.active,
+            all_stats_table.c.created_at,
+            all_stats_table.c.notification_type,
+            all_stats_table.c.status,
+            func.sum(all_stats_table.c.count).cast(Integer).label('count')
+        ).group_by(
+            all_stats_table.c.service_id,
+            all_stats_table.c.name,
+            all_stats_table.c.restricted,
+            all_stats_table.c.research_mode,
+            all_stats_table.c.active,
+            all_stats_table.c.created_at,
+            all_stats_table.c.notification_type,
+            all_stats_table.c.status,
+        ).order_by(
+            all_stats_table.c.service_id
+        )
+    else:
+        query = stats
+    return query.all()

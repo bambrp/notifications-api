@@ -1571,7 +1571,7 @@ def test_get_detailed_services_groups_by_service(notify_db, notify_db_session):
 
     service_1 = create_service(service_name="1", email_from='1')
     service_2 = create_service(service_name="2", email_from='2')
-
+    service_3 = create_service(service_name='3')
     create_sample_notification(notify_db, notify_db_session, service=service_1, status='created')
     create_sample_notification(notify_db, notify_db_session, service=service_2, status='created')
     create_sample_notification(notify_db, notify_db_session, service=service_1, status='delivered')
@@ -1580,7 +1580,7 @@ def test_get_detailed_services_groups_by_service(notify_db, notify_db_session):
     data = get_detailed_services(start_date=datetime.utcnow().date(), end_date=datetime.utcnow().date())
     data = sorted(data, key=lambda x: x['name'])
 
-    assert len(data) == 2
+    assert len(data) == 3
     assert data[0]['id'] == str(service_1.id)
     assert data[0]['statistics'] == {
         EMAIL_TYPE: {'delivered': 0, 'failed': 0, 'requested': 0},
@@ -1593,6 +1593,12 @@ def test_get_detailed_services_groups_by_service(notify_db, notify_db_session):
         SMS_TYPE: {'delivered': 0, 'failed': 0, 'requested': 1},
         LETTER_TYPE: {'delivered': 0, 'failed': 0, 'requested': 0}
     }
+
+    assert data[2]['id'] == str(service_3.id)
+    assert data[2]['statistics'] == {
+        SMS_TYPE: {'requested': 0, 'failed': 0, 'delivered': 0},
+        LETTER_TYPE: {'requested': 0, 'failed': 0, 'delivered': 0},
+        EMAIL_TYPE: {'requested': 0, 'failed': 0, 'delivered': 0}}
 
 
 def test_get_detailed_services_includes_services_with_no_notifications(notify_db, notify_db_session):
@@ -1620,6 +1626,40 @@ def test_get_detailed_services_includes_services_with_no_notifications(notify_db
         SMS_TYPE: {'delivered': 0, 'failed': 0, 'requested': 0},
         LETTER_TYPE: {'delivered': 0, 'failed': 0, 'requested': 0}
     }
+
+
+@pytest.mark.parametrize(
+    "start_date, end_date",
+    [
+        (29, 30),
+        (29, 31)
+    ]
+
+)
+@freeze_time('2018-10-31 14:00')
+def test_get_detailed_services_for_date_range_1(
+        notify_db_session, start_date, end_date
+):
+    service_2 = create_service(service_name='service_2')
+    service_1 = create_service(service_name='service_1')
+    sms_template = create_template(service=service_1, template_type=SMS_TYPE)
+    email_template = create_template(service=service_1, template_type=EMAIL_TYPE)
+    create_ft_notification_status(date(2018, 10, 24), 'sms', service_1, count=8)
+    create_ft_notification_status(date(2018, 10, 26), 'letter', service_1, count=5)
+    create_ft_notification_status(date(2018, 10, 29), 'sms', service_1, count=10)
+    create_ft_notification_status(date(2018, 10, 29), 'sms', service_1, notification_status='created')
+    create_ft_notification_status(date(2018, 10, 29), 'email', service_1, count=3)
+    create_ft_notification_status(date(2018, 10, 29), 'letter', service_2, count=10)
+
+    create_notification(service_1.templates[0], created_at=datetime(2018, 10, 30, 12, 0, 0), status='delivered')
+    create_notification(sms_template, created_at=datetime(2018, 10, 31, 11, 0, 0))
+    create_notification(sms_template, created_at=datetime(2018, 10, 31, 12, 0, 0), status='delivered')
+    create_notification(email_template, created_at=datetime(2018, 10, 31, 13, 0, 0), status='delivered')
+
+    from app.service.rest import get_detailed_services
+    results = get_detailed_services(start_date=date(2018, 10, start_date), end_date=date(2018, 10, end_date))
+    print(results)
+    assert results == []
 
 
 def test_get_detailed_services_only_includes_todays_notifications(notify_db, notify_db_session):
