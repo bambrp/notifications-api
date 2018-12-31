@@ -185,7 +185,7 @@ def test_should_not_process_sms_job_if_would_exceed_send_limits_inc_today(notify
 
 def test_should_not_process_email_job_if_would_exceed_send_limits_inc_today(notify_db, notify_db_session, mocker):
     service = create_sample_service(notify_db, notify_db_session, limit=1)
-    template = create_sample_email_template(notify_db, notify_db_session, service=service)
+    template = create_sample_email_template(service=service)
     job = create_sample_job(notify_db, notify_db_session, service=service, template=template)
 
     create_sample_notification(notify_db, notify_db_session, service=service, job=job)
@@ -204,7 +204,7 @@ def test_should_not_process_email_job_if_would_exceed_send_limits_inc_today(noti
 @freeze_time("2016-01-01 11:09:00.061258")
 def test_should_not_process_email_job_if_would_exceed_send_limits(notify_db, notify_db_session, mocker):
     service = create_sample_service(notify_db, notify_db_session, limit=0)
-    template = create_sample_email_template(notify_db, notify_db_session, service=service)
+    template = create_sample_email_template(service=service)
     job = create_sample_job(notify_db, notify_db_session, service=service, template=template)
 
     mocker.patch('app.celery.tasks.s3.get_job_from_s3')
@@ -234,7 +234,7 @@ def test_should_process_email_job_if_exactly_on_send_limits(notify_db,
                                                             notify_db_session,
                                                             mocker):
     service = create_sample_service(notify_db, notify_db_session, limit=10)
-    template = create_sample_email_template(notify_db, notify_db_session, service=service)
+    template = create_sample_email_template(service=service)
     job = create_sample_job(notify_db, notify_db_session, service=service, template=template, notification_count=10)
 
     mocker.patch('app.celery.tasks.s3.get_job_from_s3', return_value=load_example_csv('multiple_email'))
@@ -643,7 +643,7 @@ def test_should_put_save_email_task_in_research_mode_queue_if_research_mode_serv
     service.research_mode = True
     services_dao.dao_update_service(service)
 
-    template = create_sample_email_template(notify_db, notify_db_session, service=service)
+    template = create_sample_email_template(service=service)
 
     notification = _notification_json(template, to="test@test.com")
 

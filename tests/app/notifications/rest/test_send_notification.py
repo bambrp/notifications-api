@@ -423,7 +423,7 @@ def test_should_block_api_call_if_over_day_limit_for_live_service(
             mocker.patch('app.celery.provider_tasks.deliver_email.apply_async')
 
             service = create_sample_service(notify_db, notify_db_session, limit=1, restricted=False)
-            email_template = create_sample_email_template(notify_db, notify_db_session, service=service)
+            email_template = create_sample_email_template(service=service)
             create_sample_notification(
                 notify_db, notify_db_session, template=email_template, service=service, created_at=datetime.utcnow()
             )
@@ -458,7 +458,7 @@ def test_should_block_api_call_if_over_day_limit_for_restricted_service(
             )
 
             service = create_sample_service(notify_db, notify_db_session, limit=1, restricted=True)
-            email_template = create_sample_email_template(notify_db, notify_db_session, service=service)
+            email_template = create_sample_email_template(service=service)
             create_sample_notification(
                 notify_db, notify_db_session, template=email_template, service=service, created_at=datetime.utcnow()
             )
@@ -493,7 +493,7 @@ def test_should_allow_api_call_if_under_day_limit_regardless_of_type(
             mocker.patch('app.celery.provider_tasks.deliver_sms.apply_async')
 
             service = create_sample_service(notify_db, notify_db_session, limit=2, restricted=restricted)
-            email_template = create_sample_email_template(notify_db, notify_db_session, service=service)
+            email_template = create_sample_email_template(service=service)
             sms_template = create_sample_template(notify_db, notify_db_session, service=service)
             create_sample_notification(notify_db, notify_db_session, template=email_template, service=service)
 
@@ -516,7 +516,7 @@ def test_should_not_return_html_in_body(notify_api, notify_db, notify_db_session
     with notify_api.test_request_context():
         with notify_api.test_client() as client:
             mocker.patch('app.celery.provider_tasks.deliver_email.apply_async')
-            email_template = create_sample_email_template(notify_db, notify_db_session, content='hello\nthere')
+            email_template = create_sample_email_template(content='hello\nthere')
 
             data = {
                 'to': 'ok@ok.com',

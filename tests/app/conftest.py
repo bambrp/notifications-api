@@ -281,8 +281,6 @@ def sample_sms_template_with_html(notify_db, notify_db_session):
 
 @pytest.fixture(scope='function')
 def sample_email_template(
-        notify_db,
-        notify_db_session,
         template_name="Email Template Name",
         template_type="email",
         user=None,
@@ -293,23 +291,23 @@ def sample_email_template(
     if user is None:
         user = create_user()
     if service is None:
-        service = sample_service(notify_db, notify_db_session, permissions=permissions)
-    data = {
-        'name': template_name,
-        'template_type': template_type,
-        'content': content,
-        'service': service,
-        'created_by': user,
-        'subject': subject_line
-    }
-    template = Template(**data)
-    dao_create_template(template)
-    return template
+        service = create_service(
+            service_permissions=permissions,
+            user=user,
+        )
+    return create_template(
+        template_name=template_name,
+        template_type=template_type,
+        content=content,
+        service=service,
+        created_by=user,
+        subject=subject_line,
+    )
 
 
 @pytest.fixture(scope='function')
 def sample_template_without_email_permission(notify_db, notify_db_session):
-    return sample_email_template(notify_db, notify_db_session, permissions=[SMS_TYPE])
+    return sample_email_template(permissions=[SMS_TYPE])
 
 
 @pytest.fixture
@@ -326,17 +324,13 @@ def sample_trial_letter_template(sample_service_full_permissions):
 @pytest.fixture(scope='function')
 def sample_email_template_with_placeholders(notify_db, notify_db_session):
     return sample_email_template(
-        notify_db,
-        notify_db_session,
         content="Hello ((name))\nThis is an email from GOV.UK",
         subject_line="((name))")
 
 
 @pytest.fixture(scope='function')
-def sample_email_template_with_html(notify_db, notify_db_session):
+def sample_email_template_with_html():
     return sample_email_template(
-        notify_db,
-        notify_db_session,
         content="Hello ((name))\nThis is an email from GOV.UK with <em>some HTML</em>",
         subject_line="((name)) <em>some HTML</em>")
 
@@ -443,8 +437,6 @@ def sample_email_job(notify_db,
         service = sample_service(notify_db, notify_db_session)
     if template is None:
         template = sample_email_template(
-            notify_db,
-            notify_db_session,
             service=service)
     job_id = uuid.uuid4()
     data = {
@@ -638,7 +630,7 @@ def sample_notification_with_api_key(notify_db, notify_db_session):
 def sample_email_notification(notify_db, notify_db_session):
     created_at = datetime.utcnow()
     service = sample_service(notify_db, notify_db_session)
-    template = sample_email_template(notify_db, notify_db_session, service=service)
+    template = sample_email_template(service=service)
     job = sample_job(notify_db, notify_db_session, service=service, template=template)
 
     notification_id = uuid.uuid4()

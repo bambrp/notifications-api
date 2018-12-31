@@ -142,16 +142,18 @@ def create_template(
         hidden=False,
         archived=False,
         folder=None,
+        created_by=None,
 ):
     data = {
         'name': template_name or '{} Template Name'.format(template_type),
         'template_type': template_type,
         'content': content,
         'service': service,
-        'created_by': service.created_by,
+        'created_by': created_by or service.created_by,
         'reply_to': reply_to,
         'hidden': hidden,
         'folder': folder,
+
     }
     if template_type != SMS_TYPE:
         data['subject'] = subject
