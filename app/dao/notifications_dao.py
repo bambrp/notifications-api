@@ -255,6 +255,7 @@ def get_notifications_for_service(
         filter_dict=None,
         page=1,
         page_size=None,
+        limit_instead_of_paginate=False,
         limit_days=None,
         key_type=None,
         personalisation=False,
@@ -298,10 +299,15 @@ def get_notifications_for_service(
             joinedload('template')
         )
 
-    return query.order_by(desc(Notification.created_at)).paginate(
-        page=page,
-        per_page=page_size
-    )
+    query.order_by(desc(Notification.created_at))
+
+    if limit_instead_of_paginate:
+        return query.limit(page_size).all()
+    else:
+        return query.paginate(
+            page=page,
+            per_page=page_size
+        )
 
 
 def _filter_query(query, filter_dict=None):

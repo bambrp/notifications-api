@@ -345,28 +345,37 @@ def get_all_notifications_for_service(service_id):
     include_from_test_key = data.get('include_from_test_key', False)
     include_one_off = data.get('include_one_off', True)
 
+    limit_instead_of_paginate = data.get('limit_instead_of_paginate', False)
+
     pagination = notifications_dao.get_notifications_for_service(
         service_id,
         filter_dict=data,
         page=page,
         page_size=page_size,
+        limit_instead_of_paginate=limit_instead_of_paginate,
         limit_days=limit_days,
         include_jobs=include_jobs,
         include_from_test_key=include_from_test_key,
         include_one_off=include_one_off
     )
+
+    if limit_instead_of_paginate:
+        notifications = pagination
+    else:
+        notifications = pagination.items
+
     kwargs = request.args.to_dict()
     kwargs['service_id'] = service_id
 
     if data.get('format_for_csv'):
-        notifications = [notification.serialize_for_csv() for notification in pagination.items]
+        notifications = [notification.serialize_for_csv() for notification in notifications]
     else:
-        notifications = notification_with_template_schema.dump(pagination.items, many=True).data
+        notifications = notification_with_template_schema.dump(notifications, many=True).data
     return jsonify(
         notifications=notifications,
         page_size=page_size,
-        total=pagination.total,
-        links=pagination_links(
+        total=None if limit_instead_of_paginate else pagination.total,
+        links=[] if limit_instead_of_paginate else pagination_links(
             pagination,
             '.get_all_notifications_for_service',
             **kwargs
