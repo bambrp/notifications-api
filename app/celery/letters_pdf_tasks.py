@@ -47,6 +47,10 @@ from app.models import (
 )
 
 
+class PDFValidationError(Exception):
+    pass
+
+
 @notify_celery.task(bind=True, name="create-letters-pdf", max_retries=15, default_retry_delay=300)
 @statsd(namespace="tasks")
 def create_letters_pdf(self, notification_id):
@@ -188,27 +192,20 @@ def process_virus_scan_passed(self, filename):
     scan_pdf_object = s3.get_s3_object(current_app.config['LETTERS_SCAN_BUCKET_NAME'], filename)
     old_pdf = scan_pdf_object.get()['Body'].read()
 
-    billable_units = _get_page_count(notification, old_pdf)
-    new_pdf = _sanitise_precompiled_pdf(self, notification, old_pdf)
+    try:
+        billable_units = _get_page_count(notification, old_pdf)
+        new_pdf = _sanitise_precompiled_pdf(self, notification, old_pdf)
+    except PDFValidationError:
+        # TODO: Remove this once CYSP update their template to not cross over the margins
+        if notification.service_id == UUID('fe44178f-3b45-4625-9f85-2264a36dd9ec'):  # CYSP
+            # Check your state pension submit letters with good addresses and notify tags, so just use their supplied pdf
+            new_pdf = old_pdf
+        else:
+            current_app.logger.info('Invalid precompiled pdf received {} ({})'.format(notification.id, filename))
+            _move_letter_and_update_status(notification.reference, filename, scan_pdf_object)
+            return
 
-    # TODO: Remove this once CYSP update their template to not cross over the margins
-    if notification.service_id == UUID('fe44178f-3b45-4625-9f85-2264a36dd9ec'):  # CYSP
-        # Check your state pension submit letters with good addresses and notify tags, so just use their supplied pdf
-        new_pdf = old_pdf
-
-    if not new_pdf:
-        current_app.logger.info('Invalid precompiled pdf received {} ({})'.format(notification.id, filename))
-
-        notification.status = NOTIFICATION_VALIDATION_FAILED
-        dao_update_notification(notification)
-
-        move_scan_to_invalid_pdf_bucket(filename)
-        scan_pdf_object.delete()
-        return
-    else:
-        current_app.logger.info(
-            "Validation was successful for precompiled pdf {} ({})".format(notification.id, filename))
-
+    current_app.logger.info("Validation was successful for precompiled pdf {} ({})".format(notification.id, filename))
     current_app.logger.info('notification id {} ({}) sanitised and ready to send'.format(notification.id, filename))
 
     _upload_pdf_to_test_or_live_pdf_bucket(
@@ -231,14 +228,20 @@ def _get_page_count(notification, old_pdf):
         pages_per_sheet = 2
         billable_units = math.ceil(pages / pages_per_sheet)
         return billable_units
-    except PdfReadError as e:
+    except PdfReadError:
         current_app.logger.exception(msg='Invalid PDF received for notification_id: {}'.format(notification.id))
-        update_letter_pdf_status(
-            reference=notification.reference,
-            status=NOTIFICATION_VALIDATION_FAILED,
-            billable_units=0
-        )
-        raise e
+        raise PDFValidationError
+
+
+def _move_letter_and_update_status(notification_reference, filename, scan_pdf_object):
+    move_scan_to_invalid_pdf_bucket(filename)
+    scan_pdf_object.delete()
+
+    update_letter_pdf_status(
+        reference=notification_reference,
+        status=NOTIFICATION_VALIDATION_FAILED,
+        billable_units=0
+    )
 
 
 def _upload_pdf_to_test_or_live_pdf_bucket(pdf_data, filename, is_test_letter):
@@ -272,7 +275,7 @@ def _sanitise_precompiled_pdf(self, notification, precompiled_pdf):
             current_app.logger.info(
                 "sanitise_precompiled_pdf validation error for notification: {}".format(notification.id)
             )
-            return None
+            raise PDFValidationError
 
         try:
             current_app.logger.exception(
