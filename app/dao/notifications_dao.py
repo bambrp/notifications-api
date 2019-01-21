@@ -7,6 +7,7 @@ from datetime import (
 
 from boto.exception import BotoClientError
 from flask import current_app
+from notifications_utils.notification_status import get_status_list
 from notifications_utils.international_billing_rates import INTERNATIONAL_BILLING_RATES
 from notifications_utils.recipients import (
     validate_and_format_email_address,
@@ -281,7 +282,7 @@ def _filter_query(query, filter_dict=None):
     # filter by status
     statuses = multidict.getlist('status')
     if statuses:
-        statuses = Notification.substitute_status(statuses)
+        statuses = get_status_list(names=statuses)
         query = query.filter(Notification.status.in_(statuses))
 
     # filter by template

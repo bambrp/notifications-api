@@ -3,6 +3,7 @@ import uuid
 import datetime
 from flask import url_for, current_app
 
+import sqlalchemy.types as types
 from sqlalchemy.ext.declarative import declared_attr
 from sqlalchemy.ext.associationproxy import association_proxy
 from sqlalchemy.ext.hybrid import hybrid_property
@@ -20,6 +21,7 @@ from notifications_utils.recipients import (
     InvalidEmailError
 )
 from notifications_utils.letter_timings import get_letter_timings
+from notifications_utils.notification_status import NotificationStatus, get_status, get_status_list
 from notifications_utils.template import (
     PlainTextEmailTemplate,
     SMSMessageTemplate,
@@ -1114,85 +1116,45 @@ class VerifyCode(db.Model):
         return check_hash(cde, self._code)
 
 
-NOTIFICATION_CANCELLED = 'cancelled'
-NOTIFICATION_CREATED = 'created'
-NOTIFICATION_SENDING = 'sending'
-NOTIFICATION_SENT = 'sent'
-NOTIFICATION_DELIVERED = 'delivered'
-NOTIFICATION_PENDING = 'pending'
-NOTIFICATION_FAILED = 'failed'
-NOTIFICATION_TECHNICAL_FAILURE = 'technical-failure'
-NOTIFICATION_TEMPORARY_FAILURE = 'temporary-failure'
-NOTIFICATION_PERMANENT_FAILURE = 'permanent-failure'
-NOTIFICATION_PENDING_VIRUS_CHECK = 'pending-virus-check'
-NOTIFICATION_VALIDATION_FAILED = 'validation-failed'
-NOTIFICATION_VIRUS_SCAN_FAILED = 'virus-scan-failed'
-NOTIFICATION_RETURNED_LETTER = 'returned-letter'
+NOTIFICATION_CANCELLED = get_status('cancelled')
+NOTIFICATION_CREATED = get_status('created')
+NOTIFICATION_SENDING = get_status('sending')
+NOTIFICATION_SENT = get_status('sent')
+NOTIFICATION_DELIVERED = get_status('delivered')
+NOTIFICATION_PENDING = get_status('pending')
+NOTIFICATION_FAILED = get_status('failed')
+NOTIFICATION_TECHNICAL_FAILURE = get_status('technical-failure')
+NOTIFICATION_TEMPORARY_FAILURE = get_status('temporary-failure')
+NOTIFICATION_PERMANENT_FAILURE = get_status('permanent-failure')
+NOTIFICATION_PENDING_VIRUS_CHECK = get_status('pending-virus-check')
+NOTIFICATION_VALIDATION_FAILED = get_status('validation-failed')
+NOTIFICATION_VIRUS_SCAN_FAILED = get_status('virus-scan-failed')
+NOTIFICATION_RETURNED_LETTER = get_status('returned-letter')
 
-NOTIFICATION_STATUS_TYPES_FAILED = [
-    NOTIFICATION_TECHNICAL_FAILURE,
-    NOTIFICATION_TEMPORARY_FAILURE,
-    NOTIFICATION_PERMANENT_FAILURE,
-    NOTIFICATION_VALIDATION_FAILED,
-    NOTIFICATION_VIRUS_SCAN_FAILED,
-    NOTIFICATION_RETURNED_LETTER,
-]
-
-NOTIFICATION_STATUS_TYPES_COMPLETED = [
-    NOTIFICATION_SENT,
-    NOTIFICATION_DELIVERED,
-    NOTIFICATION_FAILED,
-    NOTIFICATION_TECHNICAL_FAILURE,
-    NOTIFICATION_TEMPORARY_FAILURE,
-    NOTIFICATION_PERMANENT_FAILURE,
-    NOTIFICATION_RETURNED_LETTER,
-    NOTIFICATION_CANCELLED,
-]
-
-NOTIFICATION_STATUS_SUCCESS = [
-    NOTIFICATION_SENT,
-    NOTIFICATION_DELIVERED
-]
-
-NOTIFICATION_STATUS_TYPES_BILLABLE_FOR_LETTERS = [
-    NOTIFICATION_SENDING,
-    NOTIFICATION_DELIVERED,
-    NOTIFICATION_RETURNED_LETTER,
-]
-
-NOTIFICATION_STATUS_TYPES_BILLABLE = [
-    NOTIFICATION_SENDING,
-    NOTIFICATION_SENT,
-    NOTIFICATION_DELIVERED,
-    NOTIFICATION_FAILED,
-    NOTIFICATION_TEMPORARY_FAILURE,
-    NOTIFICATION_PERMANENT_FAILURE,
-    NOTIFICATION_RETURNED_LETTER,
-]
-
-NOTIFICATION_STATUS_TYPES = [
-    NOTIFICATION_CANCELLED,
-    NOTIFICATION_CREATED,
-    NOTIFICATION_SENDING,
-    NOTIFICATION_SENT,
-    NOTIFICATION_DELIVERED,
-    NOTIFICATION_PENDING,
-    NOTIFICATION_FAILED,
-    NOTIFICATION_TECHNICAL_FAILURE,
-    NOTIFICATION_TEMPORARY_FAILURE,
-    NOTIFICATION_PERMANENT_FAILURE,
-    NOTIFICATION_PENDING_VIRUS_CHECK,
-    NOTIFICATION_VALIDATION_FAILED,
-    NOTIFICATION_VIRUS_SCAN_FAILED,
-    NOTIFICATION_RETURNED_LETTER,
-]
-
+NOTIFICATION_STATUS_TYPES_FAILED = get_status_list(failure=True)
+NOTIFICATION_STATUS_TYPES_COMPLETED = get_status_list(final=True)
+NOTIFICATION_STATUS_SUCCESS = get_status_list(success=True)
+NOTIFICATION_STATUS_TYPES_BILLABLE_FOR_LETTERS = get_status_list(notification_type=LETTER_TYPE, billable=True)
+NOTIFICATION_STATUS_TYPES_BILLABLE = get_status_list(billable=True)
+NOTIFICATION_STATUS_TYPES = get_status_list()
 NOTIFICATION_STATUS_TYPES_NON_BILLABLE = list(set(NOTIFICATION_STATUS_TYPES) - set(NOTIFICATION_STATUS_TYPES_BILLABLE))
-
-NOTIFICATION_STATUS_TYPES_ENUM = db.Enum(*NOTIFICATION_STATUS_TYPES, name='notify_status_type')
 
 NOTIFICATION_STATUS_LETTER_ACCEPTED = 'accepted'
 NOTIFICATION_STATUS_LETTER_RECEIVED = 'received'
+
+
+class DBNotificationStatus(types.TypeDecorator):
+    impl = types.String
+
+    def process_bind_param(self, value, dialect):
+        if isinstance(value, NotificationStatus):
+            return value.name
+        else:
+            return value
+
+    def process_result_value(self, value, dialect):
+        return get_status(value)
+
 
 DVLA_RESPONSE_STATUS_SENT = 'Sent'
 
@@ -1249,7 +1211,7 @@ class Notification(db.Model):
         onupdate=datetime.datetime.utcnow)
     status = db.Column(
         'notification_status',
-        db.String,
+        DBNotificationStatus,
         db.ForeignKey('notification_status_types.name'),
         index=True,
         nullable=True,
@@ -1301,58 +1263,10 @@ class Notification(db.Model):
         self._personalisation = encryption.encrypt(personalisation or {})
 
     def completed_at(self):
-        if self.status in NOTIFICATION_STATUS_TYPES_COMPLETED:
+        if self.status in get_status_list(final=True):
             return self.updated_at.strftime(DATETIME_FORMAT)
 
         return None
-
-    @staticmethod
-    def substitute_status(status_or_statuses):
-        """
-        static function that takes a status or list of statuses and substitutes our new failure types if it finds
-        the deprecated one
-
-        > IN
-        'failed'
-
-        < OUT
-        ['technical-failure', 'temporary-failure', 'permanent-failure']
-
-        -
-
-        > IN
-        ['failed', 'created', 'accepted']
-
-        < OUT
-        ['technical-failure', 'temporary-failure', 'permanent-failure', 'created', 'sending']
-
-
-        -
-
-        > IN
-        'delivered'
-
-        < OUT
-        ['received']
-
-        :param status_or_statuses: a single status or list of statuses
-        :return: a single status or list with the current failure statuses substituted for 'failure'
-        """
-
-        def _substitute_status_str(_status):
-            return (
-                NOTIFICATION_STATUS_TYPES_FAILED if _status == NOTIFICATION_FAILED else
-                [NOTIFICATION_CREATED, NOTIFICATION_SENDING] if _status == NOTIFICATION_STATUS_LETTER_ACCEPTED else
-                NOTIFICATION_DELIVERED if _status == NOTIFICATION_STATUS_LETTER_RECEIVED else
-                [_status]
-            )
-
-        def _substitute_status_seq(_statuses):
-            return list(set(itertools.chain.from_iterable(_substitute_status_str(status) for status in _statuses)))
-
-        if isinstance(status_or_statuses, str):
-            return _substitute_status_str(status_or_statuses)
-        return _substitute_status_seq(status_or_statuses)
 
     @property
     def content(self):

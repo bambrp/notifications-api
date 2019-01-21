@@ -32,6 +32,8 @@ from tests.app.db import (
     create_template_folder
 )
 
+from notifications_utils.notification_status import get_status_list
+
 
 @pytest.mark.parametrize('mobile_number', [
     '07700 900678',
@@ -72,7 +74,7 @@ def test_should_not_build_service_whitelist_from_invalid_contact(recipient_type,
     ([NOTIFICATION_FAILED], NOTIFICATION_STATUS_TYPES_FAILED),
     ([NOTIFICATION_CREATED], [NOTIFICATION_CREATED]),
     ([NOTIFICATION_TECHNICAL_FAILURE], [NOTIFICATION_TECHNICAL_FAILURE]),
-    (NOTIFICATION_STATUS_LETTER_RECEIVED, NOTIFICATION_DELIVERED),
+    (NOTIFICATION_STATUS_LETTER_RECEIVED, [NOTIFICATION_DELIVERED]),
     # passing in lists containing multiple statuses
     ([NOTIFICATION_FAILED, NOTIFICATION_CREATED], NOTIFICATION_STATUS_TYPES_FAILED + [NOTIFICATION_CREATED]),
     ([NOTIFICATION_CREATED, NOTIFICATION_PENDING], [NOTIFICATION_CREATED, NOTIFICATION_PENDING]),
@@ -88,7 +90,7 @@ def test_should_not_build_service_whitelist_from_invalid_contact(recipient_type,
     ),
 ])
 def test_status_conversion(initial_statuses, expected_statuses):
-    converted_statuses = Notification.substitute_status(initial_statuses)
+    converted_statuses = get_status_list(names=initial_statuses)
     assert len(converted_statuses) == len(expected_statuses)
     assert set(converted_statuses) == set(expected_statuses)
 
