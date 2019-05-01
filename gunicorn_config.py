@@ -4,7 +4,7 @@ import traceback
 
 workers = 4
 worker_class = "eventlet"
-worker_connections = 256
+worker_connections = 30
 errorlog = "/home/vcap/logs/gunicorn_error.log"
 bind = "0.0.0.0:{}".format(os.getenv("PORT"))
 

@@ -96,6 +96,20 @@ def create_app(application):
     from app.commands import setup_commands
     setup_commands(application)
 
+    from werkzeug.contrib.profiler import ProfilerMiddleware
+
+    try:
+        os.mkdir(os.path.abspath('./prof'))
+    except:
+        pass
+    application.config['PROFILE'] = True
+    application.wsgi_app = ProfilerMiddleware(
+        application.wsgi_app,
+        restrictions=[30],
+        profile_dir='./prof',
+        filename_format="{method}.{path}.{elapsed:09.2f}ms.{time:f}.prof",
+    )
+
     return application
 
 
